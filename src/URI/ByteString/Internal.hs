@@ -317,7 +317,7 @@ serializeAuthority' opts mScheme = BB.toByteString . serializeAuthority opts mSc
 
 -------------------------------------------------------------------------------
 serializeUserInfo :: UserInfo -> Builder
-serializeUserInfo UserInfo {..} = bs uiUsername <> c8 ':' <> bs uiPassword <> c8 '@'
+serializeUserInfo UserInfo {..} = bs uiUsername <> maybe mempty (\password -> c8 ':' <> bs password) uiPassword <> c8 '@'
 
 serializeUserInfo' :: UserInfo -> ByteString
 serializeUserInfo' = BB.toByteString . serializeUserInfo
@@ -483,7 +483,9 @@ userInfoParser = (uiTokenParser <* word8 atSym) `orFailWith` MalformedUserInfo
     uiTokenParser = do
       ui <- A.takeWhile1 validForUserInfo
       let (user, passWithColon) = BS.break (== colon) $ urlDecode' ui
-      let pass = BS.drop 1 passWithColon
+      let pass = if BS.null passWithColon
+            then Nothing
+            else Just (BS.drop 1 passWithColon)
       return $ UserInfo user pass
     validForUserInfo = inClass $ pctEncoded ++ subDelims ++ (':' : unreserved)
 
