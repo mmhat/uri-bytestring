@@ -78,28 +78,49 @@ parseUriTests =
       testParses "https://user:pass:wo%20rd@www.example.org?foo=bar&foo=baz+quux#frag" $
         URI
           (Scheme "https")
-          (Just (Authority (Just (UserInfo "user" "pass:wo rd")) (Host "www.example.org") Nothing))
+          (Just (Authority (Just (UserInfo "user" (Just "pass:wo rd"))) (Host "www.example.org") Nothing))
           ""
           (Query [("foo", "bar"), ("foo", "baz+quux")])
           (Just "frag"),
       testParses "https://user@www.example.org" $
         URI
           (Scheme "https")
-          (Just (Authority (Just (UserInfo "user" "")) (Host "www.example.org") Nothing))
+          (Just (Authority (Just (UserInfo "user" Nothing)) (Host "www.example.org") Nothing))
+          ""
+          (Query [])
+          Nothing,
+      testParses "https://user:@www.example.org" $
+        URI
+          (Scheme "https")
+          (Just (Authority (Just (UserInfo "user" (Just ""))) (Host "www.example.org") Nothing))
+          ""
+          (Query [])
+          Nothing,
+      testParses "https://user::@www.example.org" $
+        URI
+          (Scheme "https")
+          (Just (Authority (Just (UserInfo "user" (Just ":"))) (Host "www.example.org") Nothing))
           ""
           (Query [])
           Nothing,
       testParses "https://@www.example.org" $
         URI
           (Scheme "https")
-          (Just (Authority (Just (UserInfo "" "")) (Host "www.example.org") Nothing))
+          (Just (Authority (Just (UserInfo "" Nothing)) (Host "www.example.org") Nothing))
+          ""
+          (Query [])
+          Nothing,
+      testParses "https://:@www.example.org" $
+        URI
+          (Scheme "https")
+          (Just (Authority (Just (UserInfo "" (Just ""))) (Host "www.example.org") Nothing))
           ""
           (Query [])
           Nothing,
       testParses "https://::@www.example.org" $
         URI
           (Scheme "https")
-          (Just (Authority (Just (UserInfo "" ":")) (Host "www.example.org") Nothing))
+          (Just (Authority (Just (UserInfo "" (Just ":"))) (Host "www.example.org") Nothing))
           ""
           (Query [])
           Nothing,
@@ -297,7 +318,7 @@ lensTests =
       testProperty "uiPasswordL Lens" $
         property $ do
           ui <- forAll genUserInfo
-          bs <- forAll genBS
+          bs <- forAll (Gen.maybe genBS)
           (ui ^. uiPasswordL === uiPassword ui)
           (ui & uiPasswordL .~ bs) === ui {uiPassword = bs},
       testProperty "uriSchemeL Lens" $
@@ -429,7 +450,7 @@ serializeURITests =
   testGroup
     "serializeURIRef"
     [ testCase "renders userinfo correctly" $ do
-        let ui = UserInfo "user" "pass"
+        let ui = UserInfo "user" (Just "pass")
         let uri =
               URI
                 (Scheme "http")
@@ -439,6 +460,17 @@ serializeURITests =
                 (Just "somefragment")
         let res = BB.toLazyByteString (serializeURIRef uri)
         res @?= "http://user:pass@www.example.org:123/?foo=bar#somefragment",
+      testCase "renders userinfo without password correctly" $ do
+        let ui = UserInfo "user" Nothing
+        let uri =
+              URI
+                (Scheme "http")
+                (Just (Authority (Just ui) (Host "www.example.org") (Just port)))
+                "/"
+                (Query [("foo", "bar")])
+                (Just "somefragment")
+        let res = BB.toLazyByteString (serializeURIRef uri)
+        res @?= "http://user@www.example.org:123/?foo=bar#somefragment",
       testCase "encodes decoded paths" $ do
         let uri =
               URI
@@ -450,7 +482,7 @@ serializeURITests =
         let res = BB.toLazyByteString (serializeURIRef uri)
         res @?= "http://www.example.org:123/weird%20path",
       testCase "encodes relative refs" $ do
-        let ui = UserInfo "user" "pass"
+        let ui = UserInfo "user" (Just "pass")
         let uri =
               RelativeRef
                 (Just (Authority (Just ui) (Host "www.example.org") (Just port)))
